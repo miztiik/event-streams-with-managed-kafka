@@ -41,18 +41,16 @@ def send_to_kafka(_t, data):
     try:
         producer = KafkaProducer(
             security_protocol="SSL",
-            # security_protocol="PLAINTEXT",
             retry_backoff_ms=500,
             request_timeout_ms=20000,
             bootstrap_servers=GlobalArgs.KAFKA_BOOTSTRAP_SRV,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            value_serializer=lambda v: json.dumps(v).encode("utf-8")
         )
         _f = producer.send(_t, data)
         producer.flush()
-        evnt_metadata = _f.get(timeout=10)
+        _r = _f.get(timeout=10)
         logger.info(
-            f"topic:{evnt_metadata.topic} partition:{evnt_metadata.partition} offset:{evnt_metadata.offset}")
-        logger.debug(producer.metrics())
+            f"{_r.topic} :{_r.partition} :{_r.offset}")
     except Exception as e:
         logger.exception(f"ERROR:{str(e)}")
 

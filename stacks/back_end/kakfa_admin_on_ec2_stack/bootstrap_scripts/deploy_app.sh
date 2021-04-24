@@ -143,7 +143,7 @@ make_topic=`./bin/kafka-topics.sh --create --zookeeper $kafka_zookeeper --replic
 
 aws kafka get-bootstrap-brokers --region ${AWS_REGION} --cluster-arn ${KAFKA_CLUSTER_ARN}
 
-BOOTSTRAP_BROKER_SRV="b-1.miztiik-msk-cluster-0.u4j6ji.c11.kafka.us-east-1.amazonaws.com:9094,b-2.miztiik-msk-cluster-0.u4j6ji.c11.kafka.us-east-1.amazonaws.com:9094"
+BOOTSTRAP_BROKER_SRV="b-2.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094,b-1.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094"
 
 
 ./bin/kafka-console-producer.sh --broker-list ${BOOTSTRAP_BROKER_SRV} --producer.config /var/kafka/client.properties --topic  ${STORE_EVENTS_TOPIC}
