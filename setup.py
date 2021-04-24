@@ -9,17 +9,17 @@ setuptools.setup(
     name="event_streams_with_managed_kafka",
     version="0.0.1",
 
-    description="An empty CDK Python app",
+    description="event-streams-with-managed-kafka",
     long_description=long_description,
     long_description_content_type="text/markdown",
 
     author="author",
 
-    package_dir={"": "event_streams_with_managed_kafka"},
-    packages=setuptools.find_packages(where="event_streams_with_managed_kafka"),
+    package_dir={"": "stacks"},
+    packages=setuptools.find_packages(where="stacks"),
 
     install_requires=[
-        "aws-cdk.core==1.96.0",
+        "aws-cdk.core>=1.100.0",
     ],
 
     python_requires=">=3.6",
