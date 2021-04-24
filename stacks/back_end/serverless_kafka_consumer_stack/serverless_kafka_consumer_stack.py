@@ -71,7 +71,8 @@ class ServerlessKafkaConsumerStack(cdk.Stack):
             environment={
                 "LOG_LEVEL": f"{stack_log_level}",
                 "APP_ENV": "Production",
-                "TRIGGER_RANDOM_DELAY": "True"
+                "TRIGGER_RANDOM_DELAY": "True",
+                "STORE_EVENTS_BKT": f"{sales_event_bkt.bucket_name}"
             },
             role=_lambda_exec_role,
             # layers=[kafka_layer],
@@ -105,6 +106,8 @@ class ServerlessKafkaConsumerStack(cdk.Stack):
             source_account=cdk.Aws.ACCOUNT_ID,
             # source_arn=orders_bus.event_bus_arn
         )
+
+        sales_event_bkt.grant_read_write(msg_consumer_fn)
 
         ###########################################
         ################# OUTPUTS #################

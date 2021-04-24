@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import random
+import boto3
 
 
 class GlobalArgs:
@@ -13,7 +14,7 @@ class GlobalArgs:
     VERSION = "2021-04-19"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
     S3_BKT_NAME = os.getenv("STORE_EVENTS_BKT")
-    S3_PREFIX = "store_events"
+    S3_PREFIX = "sales_events"
 
 
 def set_logging(lv=GlobalArgs.LOG_LEVEL):
@@ -69,14 +70,15 @@ def lambda_handler(event, context):
                 for msg in event.get("records")[topic_partition]:
                     for k, v in msg.items():
                         LOG.info(f"{k}: {v}")
+                    sale_event = json.loads(base64ToString(msg["value"]))
                     LOG.info(
-                        {base64ToString(msg["value"])}
+                        sale_event
                     )
-                # Writing Events To S3
-                put_object(
-                    _evnt_type,
-                    evnt_body
-                )
+                    # Writing Events To S3
+                    put_object(
+                        sale_event["event_type"],
+                        sale_event
+                    )
 
         resp["status"] = True
 
