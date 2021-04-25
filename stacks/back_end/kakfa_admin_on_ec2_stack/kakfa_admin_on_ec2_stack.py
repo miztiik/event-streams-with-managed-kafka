@@ -132,13 +132,13 @@ class KafkaAdminOnEC2Stack(cdk.Stack):
         )
         output_1 = cdk.CfnOutput(
             self,
-            "ConsumerPrivateIp",
+            "InstancePrivateIp",
             value=f"http://{app_server.instance_private_ip}",
             description=f"Private IP of App on EC2"
         )
         output_2 = cdk.CfnOutput(
             self,
-            "Ec2ConsumerInstance",
+            "KafkaAdminInstance",
             value=(
                 f"https://console.aws.amazon.com/ec2/v2/home?region="
                 f"{cdk.Aws.REGION}"

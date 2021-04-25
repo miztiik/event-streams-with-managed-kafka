@@ -65,7 +65,7 @@ class S3Stack(cdk.Stack):
         )
         output_1 = cdk.CfnOutput(
             self,
-            "StoreEventsBucket",
+            "SalesEventsBucket",
             value=f"{self.data_bkt.bucket_name}",
             description=f"The datasource bucket name"
         )
@@ -73,5 +73,5 @@ class S3Stack(cdk.Stack):
             self,
             "dataSourceBucketUrl",
             value=f"https://console.aws.amazon.com/s3/buckets/{self.data_bkt.bucket_name}",
-            description=f"The datasource bucket name"
+            description=f"The datasource bucket url"
         )

@@ -24,7 +24,7 @@ sales_events_bkt_stack = S3Stack(
 # VPC Stack for hosting Secure workloads & Other resources
 vpc_stack = VpcStack(
     app,
-    f"{app.node.try_get_context('project')}-vpc-stack-01",
+    f"{app.node.try_get_context('project')}-vpc-stack",
     stack_log_level="INFO",
     description="Miztiik Automation: Custom Multi-AZ VPC"
 )
@@ -61,10 +61,11 @@ kakfa_admin_on_ec2_stack = KafkaAdminOnEC2Stack(
 # S3 Sales Event Data Producer on Lambda
 sales_events_producer_stack = ServerlessKafkaProducerStack(
     app,
-    f"sales-events-producer-stack-01",
+    f"sales-events-producer-stack",
     stack_log_level="INFO",
     vpc=vpc_stack.vpc,
     kafka_client_sg=managed_kafka_stack.kafka_client_sg,
+    kafka_topic_name="MystiqueStoreEventsTopic",
     description="Miztiik Automation: S3 Sales Event Data Producer on Lambda")
 
 # Consume messages from Kafka
@@ -73,8 +74,8 @@ sales_events_consumer_stack = ServerlessKafkaConsumerStack(
     # f"{app.node.try_get_context('project')}-orders-consumer-stack",
     f"sales-events-consumer-stack",
     stack_log_level="INFO",
-    vpc=vpc_stack.vpc,
-    kafka_client_sg=managed_kafka_stack.kafka_client_sg,
+    kafka_cluster=managed_kafka_stack.msk_cluster,
+    kafka_topic_name="MystiqueStoreEventsTopic",
     sales_event_bkt=sales_events_bkt_stack.data_bkt,
     description="Miztiik Automation: Consume Customer Order Events Messages"
 )

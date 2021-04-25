@@ -9,7 +9,7 @@ import uuid
 
 class GlobalArgs:
     OWNER = "Mystique"
-    VERSION = "2021-04-19"
+    VERSION = "2021-04-24"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
     STORE_EVENTS_TOPIC = os.getenv("STORE_EVENTS_TOPIC")
     KAFKA_BOOTSTRAP_SRV = os.getenv("KAFKA_BOOTSTRAP_SRV")
@@ -41,16 +41,11 @@ def send_to_kafka(_t, data):
     try:
         producer = KafkaProducer(
             security_protocol="SSL",
-            retry_backoff_ms=500,
-            request_timeout_ms=20000,
             bootstrap_servers=GlobalArgs.KAFKA_BOOTSTRAP_SRV,
             value_serializer=lambda v: json.dumps(v).encode("utf-8")
         )
-        _f = producer.send(_t, data)
+        producer.send(_t, data)
         producer.flush()
-        _r = _f.get(timeout=10)
-        logger.info(
-            f"{_r.topic} :{_r.partition} :{_r.offset}")
     except Exception as e:
         logger.exception(f"ERROR:{str(e)}")
 
@@ -61,6 +56,7 @@ def lambda_handler(event, context):
     _categories = ["Books", "Games", "Mobiles", "Groceries", "Shoes", "Stationaries", "Laptops",
                    "Tablets", "Notebooks", "Camera", "Printers", "Monitors", "Speakers", "Projectors", "Cables", "Furniture"]
     _evnt_types = ["sale_event", "inventory_event"]
+    _variants = ["black", "red"]
 
     try:
         t_msgs = 0
@@ -75,19 +71,22 @@ def lambda_handler(event, context):
             p_s = bool(random.getrandbits(1))
             evnt_body = {
                 "request_id": _u,
-                "category": random.choice(_categories),
-                "store_id": random.randint(1, 10),
-                "ts": datetime.datetime.now().isoformat(),
                 "event_type": _evnt_type,
-                "sales": _s,
+                "store_id": random.randint(1, 10),
+                "cust_id": random.randint(100, 999),
+                "category": random.choice(_categories),
                 "sku": random.randint(18981, 189281),
-                "gift_wrap": bool(random.getrandbits(1)),
+                "price": _s,
                 "qty": random.randint(1, 38),
+                "discount": round(random.random() * 20, 1),
+                "gift_wrap": bool(random.getrandbits(1)),
+                "variant": random.choice(_variants),
                 "priority_shipping": p_s,
+                "ts": datetime.datetime.now().isoformat(),
                 "contact_me": "github.com/miztiik"
             }
-            evnt_attr = {
-                "evnt_type": {
+            _attr = {
+                "event_type": {
                     "DataType": "String",
                     "StringValue": _evnt_type
                 },
@@ -97,7 +96,7 @@ def lambda_handler(event, context):
                 }
             }
 
-            # Make the order type as return
+            # Make order type return
             if bool(random.getrandbits(1)):
                 evnt_body["is_return"] = True
 

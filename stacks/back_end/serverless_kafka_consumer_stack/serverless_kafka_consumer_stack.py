@@ -1,6 +1,5 @@
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_iam as _iam
-from aws_cdk import aws_ec2 as _ec2
 from aws_cdk import aws_logs as _logs
 from aws_cdk import core as cdk
 from stacks.miztiik_global_args import GlobalArgs
@@ -12,8 +11,8 @@ class ServerlessKafkaConsumerStack(cdk.Stack):
         scope: cdk.Construct,
         construct_id: str,
         stack_log_level: str,
-        vpc,
-        kafka_client_sg,
+        kafka_cluster,
+        kafka_topic_name: str,
         sales_event_bkt,
         **kwargs
     ) -> None:
@@ -108,6 +107,17 @@ class ServerlessKafkaConsumerStack(cdk.Stack):
         )
 
         sales_event_bkt.grant_read_write(msg_consumer_fn)
+
+        # Add Lambda Triggers
+        _lambda.EventSourceMapping(
+            self,
+            "kafkaToLambdaTrigger",
+            target=msg_consumer_fn,
+            event_source_arn=kafka_cluster.ref,
+            batch_size=2,
+            kafka_topic=f"{kafka_topic_name}",
+            starting_position=_lambda.StartingPosition.LATEST
+        )
 
         ###########################################
         ################# OUTPUTS #################

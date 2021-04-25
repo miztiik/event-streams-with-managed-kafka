@@ -14,6 +14,7 @@ class ServerlessKafkaProducerStack(cdk.Stack):
         stack_log_level: str,
         vpc,
         kafka_client_sg,
+        kafka_topic_name: str,
         **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -66,7 +67,7 @@ class ServerlessKafkaProducerStack(cdk.Stack):
                 "LOG_LEVEL": "INFO",
                 "APP_ENV": "Production",
                 "TRIGGER_RANDOM_DELAY": "True",
-                "STORE_EVENTS_TOPIC": "MystiqueStoreEventsTopic",
+                "STORE_EVENTS_TOPIC": f"{kafka_topic_name}",
                 "KAFKA_BOOTSTRAP_SRV": "",
                 "LD_LIBRARY_PATH": "/opt/python"
             },

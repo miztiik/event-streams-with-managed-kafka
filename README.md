@@ -1,24 +1,47 @@
-# Shared Data Sets: S3 Security with Access Points
+# Event Driven Architecture with Kafka
 
-Mystique Unicorn is building a data lake in AWS using S3. Managing access to this shared bucket requires a single bucket policy that controls access for dozens to hundreds of applications with different permission levels. As an application set grows, the bucket policy becomes more complex, time consuming to manage, and needs to be audited to make sure that changes do not have an unexpected impact to an another application.
+The developer at Mystique Unicorn are interested in building their application using event-driven architectural pattern to process streaming data. For those who are unfamiliar, _An event-driven architecture uses events to trigger and communicate between decoupled services and is common in modern applications built with microservices. An event is a change in state, or an update, like an item being placed in a shopping cart on an e-commerce website._
 
-Can you help them in simplifying the access management of the data sets that can scale with application or user growth?
+In this application, they will have their physical stores, send a stream _sales_ and _inventory_ related events to a central location, where multiple downstream systems will consume these events. For example, A event for a new order will be consumed by the warehouse system and the sales events will be used by the marketing department to generate revenue and forecast reports. This pattern of separating the produce, router and consumer to independent components allows them to scale the applications without constraints.
+
+They heard that AWS offers capabilities to build event-driven architectures, Can you help them?
 
 ## 🎯 Solutions
 
+Amazon MSK<sup>[1]</sup> is a fully managed service(for kafka) that makes it easy for you to build and run applications that use Apache Kafka to process streaming data. Apache Kafka is an open-source platform for building real-time streaming data pipelines and applications. With Amazon MSK, We can use native Apache Kafka APIs to populate data lakes, stream changes to and from databases, and power machine learning and analytics applications. The integration with AWS Lambda allows you to poll your Apache Kafka topic partitions for new records and invokes your Lambda function synchronously.
 
-Lambda polls your Apache Kafka topic partitions for new records and invokes your Lambda function synchronously. To update other AWS resources that your cluster uses, your Lambda function—as well as your AWS Identity and Access Management (IAM) users and roles—must have permission to perform these actions.
+Let us consider a scenario, where a store is sending a stream of `sales` and `inventory` events that are to be consumed by two different personas. The sales managers and business analysts will need access to sales data to project revenue and create new marketing campaigns. The warehouse/delivery teams will need access to the inventory data to ensure the orders are dispatched to customer and restocked as needed. The event payload will look similar to this,
 
-Amazon S3 Access Points<sup>[1]</sup> simplifies managing data access at scale for applications using shared data sets on S3. Access points are unique hostname that customers create to enforce distinct permissions and network controls for any request made through the access point. Customers with shared data sets can easily scale access for hundreds of applications by creating individualized access points with names and permissions customized for each application. Each access point enforces a customized access point policy that works in conjunction with the bucket policy that is attached to the underlying bucket. Adding an S3 access point to a bucket does not change the bucket's behavior when accessed through the existing bucket name or ARN. All existing operations against the bucket will continue to work as before. Restrictions that you include in an access point policy apply only to requests made through that access point. This way any existing applications can continue to operate as-is and newer applications can be onboard using access points.
+```json
+{
+  "request_id": "f5570d0f-5389-4bce-98c3-7ed5380eefb2",
+  "event_type": "inventory_event",
+  "store_id": 6,
+  "cust_id": 206,
+  "category": "Camera",
+  "sku": 100657,
+  "price": 2.52,
+  "qty": 18,
+  "discount": 8.2,
+  "gift_wrap": true,
+  "variant": "red",
+  "priority_shipping": true,
+  "ts": "2021-04-25T12:52:40.938937",
+  "contact_me": "github.com/miztiik"
+}
+```
 
-Let us consider a scenario, where a store is sending a stream of `sales` and `inventory` events that are to be consumed by two different personas. The sales managers and business analysts will need access to sales data to project revenue and create new marketing campaigns. The warehouse/delivery teams will need access to the inventory data to ensure the orders are dispatched to customer and restocked as needed.
+![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_00.png)
 
-![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_00.png)
+In this demo, we will create a the architecture like the one shown above. We will have a
 
-In this demo, we will create a the architecture like the one shown above. Let us say the sales teams will need access to the data from their application running on EC2 and the inventory team will access the data from lambda. We will create a S3 bucket with two access points:
-
-- `ec2-consumer`: With access only to S3 prefix `sales_event/`
-- And `lambda-consumer`: With access only to S3 prefix `inventory_event/`
+- **Kafka Cluster**- Our primary events router with `2` brokers for high availability
+  - The cluster is named `miztiik-msk-cluster-01`
+- **producer** - Use a lambda function to creates sale events and ingests them to kafka topic
+- **consumer** - A lambda function configured to be triggered by events in kafka topic and persist the events in S3
+- **Kafka Admin** - An EC2 instance to administer the cluster - For ex. create kafka topics or modify topic attributes
+  - An Kafka Topic named `MystiqueStoreEventsTopic`. Created using EC2 userdata script. The same is _hard coded_ as environment variables for the **producer** & **consumer** lambda functions
+- **Data Bucket** - Persistent storage for the consumer
 
 1.  ## 🧰 Prerequisites
 
@@ -36,8 +59,8 @@ In this demo, we will create a the architecture like the one shown above. Let us
     - Get the application code
 
       ```bash
-      git clone https://github.com/miztiik/secure-s3-with-access-points
-      cd secure-s3-with-access-points
+      git clone https://github.com/miztiik/event-streams-with-managed-kafka
+      cd event-streams-with-managed-kafka
       ```
 
 1.  ## 🚀 Prepare the dev environment to run AWS CDK
@@ -67,10 +90,11 @@ In this demo, we will create a the architecture like the one shown above. Let us
 
     ```bash
     sales-events-bkt-stack
-    secure-s3-with-access-points-vpc-stack
-    sales-event-consumer-on-ec2-stack
-    inventory-event-consumer-on-lambda-stack
-    store-events-bkt-access-points-stack
+    event-streams-with-managed-kafka-vpc-stack
+    sales-events-kafka-stack
+    kafka-admin-on-ec2-stack
+    sales-events-producer-stack
+    sales-events-consumer-stack
     ```
 
 1.  ## 🚀 Deploying the application
@@ -79,7 +103,7 @@ In this demo, we will create a the architecture like the one shown above. Let us
 
     - **Stack: sales-events-bkt-stack**
 
-      This stack will create the s3 bucket. We will add a bucket policy to delegate all access management to be done by access points<sup>[2]</sup>.
+      This stack will create the s3 bucket. We will add a bucket policy to delegate all access management to be done by access points.
 
       Initiate the deployment with the following command,
 
@@ -87,104 +111,129 @@ In this demo, we will create a the architecture like the one shown above. Let us
       cdk deploy sales-events-bkt-stack
       ```
 
-      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the `StoreEventsBucket`.
+      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the `SalesEventsBucket`.
 
-    - **Stack: sales-event-consumer-on-ec2-stack**
-
-      To simulate the access of business analysts from EC2, We need simple ec2 instance that we can access. This stack will create the vpc using the stack `secure-s3-with-access-points-vpc-stack`. The EC2 instance will be launched in the public subnet along with a IAM Role that supports SSM Session Manager access<sup>[3]</sup>. We will later use this IAM Role to give access to the S3 Access Point `ec2-consumer`. _Also note that we will not provide any s3 privileges to our EC2 Instance role, as we are going to manage them using access points._
+    - **Stack: sales-events-kafka-stack**
+      As we are starting out a new cluster, we will use most default and choose `2` brokers for high availability. Each broker has about 1000GB of block storage attached to them. We need a VPC to host our kafka cluster, this dependency is resolved by using the vpc stack `event-streams-with-managed-kafka-vpc-stack`. The brokers will be launched in the private subnet. At this moment we are not configuring any authentication or encryption of data in our cluster.
 
       Initiate the deployment with the following command,
 
       ```bash
-      cdk deploy secure-s3-with-access-points-vpc-stack
-      cdk deploy sales-event-consumer-on-ec2-stack
+      cdk deploy event-streams-with-managed-kafka-vpc-stack
+      cdk deploy sales-events-kafka-stack
       ```
 
-      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the IAM Role Arn `Ec2ConsumerRoleArn` and the instance `Ec2ConsumerInstance`.
+      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the `SalesEventsKafkaRouter` cluster resource.
 
-    - **Stack: inventory-event-consumer-on-lambda-stack**
+    - **Stack: kafka-admin-on-ec2-stack**
 
-      To simulate the access of warehouse application accessing form lambda, we will deploy a simple lambda function that can write to S3 using the access point. The obvious question is that, if we have not yet created the access points, where in S3 will the lambda will write to? Since we know that, we are going to use the `lambda-consumer` as the access point, we will pass that as an environment variable function during deployment. _Also note that we will not provide any s3 privileges to our lambda role, as we are going to manage them using access points._
+      To simulate the access of kafka admin, we use a simple ec2 instance that we can access. The EC2 instance will be launched in the public subnet along with a IAM Role that supports SSM Session Manager access<sup>[2]</sup>. This Ec2 instance IAM role also has permissions to interact _only_ with the cluster `SalesEventsKafkaRouter` created by the previous stack.
+
+      Initiate the deployment with the following command,
 
       ```bash
-      cdk deploy inventory-event-consumer-on-lambda-stack
+      cdk deploy event-streams-with-managed-kafka-vpc-stack
+      cdk deploy sales-events-kafka-stack
       ```
 
-      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the IAM Role Arn `LambdaConsumerRoleArn` and the `LambdaConsumer` function. We will invoke this function during our testing phase. If you invoke it now, you will get errors as there no S3 privileges provided.
+      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the Kafka Admin instance `KafkaAdminInstance` that we will later use for creating/listing topics
 
-    - **Stack: store-events-bkt-access-points-stack**
+    - **Stack: sales-events-producer-stack**
 
-      At this point, we have all created all the prerequisites necessary for setting up our S3 access points. We have our S3 bucket with a policy to delegate access to S3 access points. We have the IAM role arns of our consumer applications. To keep it simple, we will use the following prefix to provide access,
+      This stack will create the producer lambda function will generate a payload(_like the one shown above_). We need the kafka client libraries to ingest the payload to the kafka topic. This has been packaged as a _lambda layer_ along with the function. If you are interested take a look here `stacks/back_end/serverless_kafka_producer_stack/lambda_src/layer_code/`. The name of the topic and the broker server information are passed as environment variables to the lambda function. The lambda is designed to run for `10` seconds that will generate approximately about _13_ events per run.
 
-      - **Access Point Name**: `ec2-consumer` with access only to **S3 Prefix**: `sales_event` for role arn: `Ec2ConsumerRoleArn`
-      - **Access Point Name**: `lambda-consumer` with access only to **S3 Prefix**: `inventory_event` for role arn: `LambdaConsumerRoleArn`
+      Initiate the deployment with the following command,
 
       ```bash
-      cdk deploy store-events-bkt-access-points-stack
+      cdk deploy sales-events-producer-stack
       ```
 
-      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the S3 Access Point Arns `Ec2ConsumerAccessPointArn` and `LambdaConsumerAccessPointArn`. We will be using them during our testing to read/write to the `StoreEventsBucket` bucket.
+      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the `SaleOrderEventsProducer` resource.
+
+    - **Stack: sales-events-consumer-stack**
+
+      This stack will create a lambda consumer function. The function will be configured will a MSK Event trigger<sup>[3]</sup>.
+
+      ```bash
+      cdk deploy sales-events-consumer-stack
+      ```
+
+      After successfully deploying the stack, Check the `Outputs` section of the stack. You will find the `msgConsumer` resource.
 
 1.  ## 🔬 Testing the solution
 
-    1. **Access the S3 Console & Check the Access Point and Permissions**:
-
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_01.png)
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_02.png)
-
     1. **Connect To Ec2 Consumer**:
 
-       Connect the `Ec2ConsumerInstance` instance using SSM Session Manager<sup>[3]</sup>. Let us try to copy some files to our bucket.
+       Connect the `KafkaAdminInstance` instance using SSM Session Manager<sup>[3]</sup>. Navigate to `/var/kafka/` directory. Kafka has been preinstalled and _if_ user-data script had ran successfully, we should have a kafka topic created automatically for us. You can check the user data script status in logs on the instance at `/var/log/miztiik-automation-*.log`. The same log had been pushed to cloudwatch as well.
 
-       **NOTE**: Replace the `Ec2ConsumerAccessPointArn` in the following command with the actual value from your stack output.
-
-       ```bash
-       sudo su -
-       cd /var/log
-       echo '{"secure-s3-with-access-points":"Miztiik Automation"}' > kon.json
-       aws s3api put-object --key kon.json --bucket  arn:aws:s3:::sales-events-bkt-stack-databucketd8691f4e-dd4t7n9edaf8 --body kon.json
-       ```
-
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_03.png)
-       The S3 command should give an error message. The reason for that is, our EC2 Instance/IAM role does not have any privileges to write to the bucket root or any other location. It can only write to the specified access point and only to the allowed S3 Prefix. Let us try one more time, writing to the S3 bucket using the AccessPointArn but without the prefix,
-
-       **NOTE**: Replace the `Ec2ConsumerAccessPointArn` in the following command with the actual value from your stack output.
+       Let us verify the kafka topic exists
 
        ```bash
-       sudo su -
-       cd /var/log
-       echo '{"secure-s3-with-access-points":"Miztiik Automation"}' > kon.json
-       aws s3api put-object --key kon.json --bucket arn:aws:s3:us-east-1:111122223333:accesspoint/ ec2-consumer --body kon.json
+        # Set the environment variables
+        cd /var/kafka
+        KAFKA_CLUSTER_NAME="miztiik-msk-cluster-01"
+        STORE_EVENTS_TOPIC="MystiqueStoreEventsTopic"
+
+        EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
+        AWS_REGION="`echo \"$EC2_AVAIL_ZONE\" | sed 's/[a-z]$//'`"
+        KAFKA_CLUSTER_ARN=`aws kafka list-clusters --region ${AWS_REGION} --cluster-name-filter ${KAFKA_CLUSTER_NAME} --output text --query 'ClusterInfoList[*].ClusterArn'`
+        KAFKA_ZOOKEEPER=`aws kafka describe-cluster --cluster-arn ${KAFKA_CLUSTER_ARN} --region ${AWS_REGION} --output text --query 'ClusterInfo.ZookeeperConnectString'`
+        BOOTSTRAP_BROKER_SRV=`aws kafka get-bootstrap-brokers --region ${AWS_REGION} --cluster-arn ${KAFKA_CLUSTER_ARN} --output text --query 'BootstrapBrokerStringTls'`
+
+        ./bin/kafka-topics.sh --list --zookeeper ${KAFKA_ZOOKEEPER}
+
+       # Just incase, you want to create another topic, change the topic name and try this command
+       ./bin/kafka-topics.sh --create --zookeeper ${KAFKA_ZOOKEEPER} --replication-factor 2 --partitions 2 --topic ${STORE_EVENTS_TOPIC}
        ```
 
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_04.png)
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_01.png)
 
-       For the final time, let us use the designated prefix `sales_event` for this access point
+       If you try to create the same topic again, you will get an error,
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_02.png)
 
-       ```bash
-       sudo su -
-       cd /var/log
-       echo '{"secure-s3-with-access-points":"Miztiik Automation"}' > kon.json
-       aws s3api put-object --key sales_event/kon.json --bucket  arn:aws:s3:us-east-1:111122223333:accesspoint/ec2-consumer --body kon.json
+       At this point, we are almost set to use our kafka cluster.
+
+    1. **Prepare Event Stream Consumer Lambda**:
+       The event stream consumer `msgConsumer` is configured to be triggered by our kafka cluster. This is set up by cloudformation and sometime this trigger is `disabled` if the kafka cluster topic is unavailable or the cluster it not ready. Let us ensure our trigger is in `Enabled` state
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_03.png)
+
+       In case the topic is unavailable before this trigger was created, you _may_ see an error `Last processing result: **PROBLEM: Topic not found.**` like this. Try to disable to and re-enable the trigger.
+
+       _If you have ensured the topic exists from `KafkaAdminInstance` and still the error persists, continue to the producer and invoke events. That should make the error go away._
+
+    1. **Invoke Sale Order Events Producer**:
+       Before invoking this function, let us ensure the environment variables for kafka topics and bootstrap server information is set correctly.
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_04.png)
+
+       You can grab the bootstrap server information from the `KafkaAdminInstance` or from **MSK Console** > **Clusters** > **`miztiik-msk-cluster-01`** > **View Client information** > **Bootstrap Servers**
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_05.png)
+
+       Let us invoke the lambda `SaleOrderEventsProducer` from the AWS Console. This function is designed to create both `sales_event` and `inventory_event` type events. If you want more events, invoke the function few times. Upon successful invocation you should a result like this,
+
+       ```json
+       {
+         "resp": {
+           "status": true,
+           "tot_msgs": 13,
+           "bad_msgs": 0,
+           "sale_evnts": 5,
+           "inventory_evnts": 8,
+           "tot_sales": 633.8199999999999
+         }
+       }
        ```
 
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_05.png)
+    1. **Check S3 Data Bucket for Event**:
 
-    1. **Invoke Producer Lambda**:
-       Let us invoke the lambda `LambdaConsumer` from the AWS Console. This function is designed to try and write to both `sales_event` and `inventory_event` prefix, just to show that it has access privileges only to write to `inventory_event` s3 prefix. Any other attempts will throw an error. If you want to ingest more events, invoke the lambda few times.
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_06.png)
+       Navigate to `SalesEventsBucket` in S3 Console, Here you can notice that the events are stored under two prefixes `sales_event` or `inventory_event`. As an example, here under the `inventory_event` prefix you will find the files received by our consumer function
 
-       You can notice the errors specifically when lambda tries to write to `sales_event` prefix
+       ![Miztiik Automation: Event Driven Architecture with Kafka](images/miztiik_automation_event_streams_with_managed_kafka_architecture_06.png)
 
-    1. **Check S3 for Files Logs for Sales Consumer**:
-
-       Here you can notice that the files `kon.json` uploaded from EC2 is under the `sales_event` prefix. Likewise lambda was able to only write to `inventory_prefix`.
-
-       ![Miztiik Automation: Shared Data Sets: S3 Security with Access Points](images/miztiik_automation_secure_s3_with_access_points_architecture_07.png)
+       You can use S3 select to view the files.
 
 1.  ## 📒 Conclusion
 
-    Here we have demonstrated how to use manage access to shared buckets using S3 access points. There are few limitations documented here<sup>[4]</sup>. But as time progresses, some of them will be removed or more features will be added to overcome these.
+    Here we have demonstrated how to use kafka to route events between producers and consumers. You can extend this by using kafka's capability filter messages based on attributes. For example, the producer in this case is designed to produce some bad messages. You can write a rule to filter out the `bad_msgs` before sending them to consumers.
 
 1.  ## 🧹 CleanUp
 
@@ -210,7 +259,7 @@ In this demo, we will create a the architecture like the one shown above. Let us
 
 ## 📌 Who is using this
 
-This repository aims to show how to use S3 Access points to new developers, Solution Architects & Ops Engineers in AWS. Based on that knowledge these Udemy [course #1][102], [course #2][101] helps you build complete architecture in AWS.
+This repository aims to show how to use kafka as an event router to new developers, Solution Architects & Ops Engineers in AWS. Based on that knowledge these Udemy [course #1][102], [course #2][101] helps you build complete architecture in AWS.
 
 ### 💡 Help/Suggestions or 🐛 Bugs
 
@@ -222,10 +271,11 @@ Thank you for your interest in contributing to our project. Whether it is a bug 
 
 ### 📚 References
 
-1. [Docs: Troubleshooting Your Amazon MSK Cluster][1]
-1. [AWS Docs: Create Topics][2]
-1. [AWS SSM Session Manager][3]
-1. [Docs: Amazon S3 - Access points restrictions and limitations][4]
+1. [AWS Docs: Amazon MSK][1]
+1. [AWS SSM Session Manager][2]
+1. [AWS Docs: Amazon MSK cluster as an event source][3]
+1. [AWS Docs: Create Topics][4]
+1. [Docs: Troubleshooting Your Amazon MSK Cluster][5]
 
 ### 🏷️ Metadata
 
@@ -233,8 +283,11 @@ Thank you for your interest in contributing to our project. Whether it is a bug 
 
 **Level**: 200
 
-[1]: https://docs.aws.amazon.com/msk/latest/developerguide/troubleshooting.html#networking-trouble
-[2]: https://docs.aws.amazon.com/msk/latest/developerguide/create-topic.html
+[1]: https://aws.amazon.com/msk/
+[2]: https://www.youtube.com/watch?v=-ASMtZBrx-k
+[3]: https://docs.aws.amazon.com/lambda/latest/dg/services-msk-topic-add.html
+[4]: https://docs.aws.amazon.com/msk/latest/developerguide/create-topic.html
+[5]: https://docs.aws.amazon.com/msk/latest/developerguide/troubleshooting.html#networking-trouble
 [100]: https://www.udemy.com/course/aws-cloud-security/?referralCode=B7F1B6C78B45ADAF77A9
 [101]: https://www.udemy.com/course/aws-cloud-security-proactive-way/?referralCode=71DC542AD4481309A441
 [102]: https://www.udemy.com/course/aws-cloud-development-kit-from-beginner-to-professional/?referralCode=E15D7FB64E417C547579

@@ -2,7 +2,7 @@
 set -ex
 set -o pipefail
 
-# version: 11Apr2021
+# VERSION: 2021-04-25
 
 ##################################################
 #############     SET GLOBALS     ################
@@ -15,6 +15,8 @@ GIT_REPO_URL="https://github.com/miztiik/$REPO_NAME.git"
 APP_DIR="/var/$REPO_NAME"
 
 LOG_FILE="/var/log/miztiik-automation-bootstrap.log"
+
+APP_LOG_FILE="/var/log/miztiik-automation-app-kafka.log"
 
 userdata_troubleshooting(){
     USER_DATA_SCRIPT_LOC="/var/lib/cloud/instances/"
@@ -60,10 +62,9 @@ function add_env_vars(){
     EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
     AWS_REGION="`echo \"$EC2_AVAIL_ZONE\" | sed 's/[a-z]$//'`"
     export AWS_REGION
-    sudo touch /var/log/miztiik-load-generator-unthrottled.log
-    sudo touch /var/log/miztiik-load-generator-throttled.log
-    sudo chmod 775 /var/log/miztiik-load-generator-*
-    sudo chown root:ssm-user /var/log/miztiik-load-generator-*
+    #setup bash env
+    su -c "echo 'export PS1=\"MiztiikKafkaAdmin01 [\u@\h \W\\]$ \"' >> /home/ec2-user/.bash_profile" -s /bin/sh ec2-user
+    # su -c "echo '[ -f /var/kafka/setup_env ] && . /var/kafka/setup_env' >> /home/ec2-user/.bash_profile" -s /bin/sh ec2-user
 }
 
 function install_libs(){
@@ -104,52 +105,42 @@ function install_kafka(){
 
     wget https://archive.apache.org/dist/kafka/2.2.1/kafka_2.12-2.2.1.tgz
     tar -xzf kafka_2.12-2.2.1.tgz --strip 1
-    find /usr/lib/jvm/ -name "cacerts" -exec cp {} /var/kafka/kafka.client.truststore.jks \;
 
 }
-function install_kafka_old(){
 
-find /usr/lib/jvm/ -name "cacerts" -exec cp {} /var/kafka.client.truststore.jks \;
+function configure_kafka_topic(){
+cd /var/kafka/
+EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
+AWS_REGION="`echo \"$EC2_AVAIL_ZONE\" | sed 's/[a-z]$//'`"
 
-cp /usr/lib/jvm/java-11-amazon-corretto.x86_64/lib/security/cacerts /var/kafka/kafka.client.truststore.jks
+export AWS_REGION
 
+# Setup up Trust certificate in client properites
+find /usr/lib/jvm/ -name "cacerts" -exec cp {} /var/kafka/kafka.client.truststore.jks \;
 cat > '/var/kafka/client.properties' << "EOF"
 security.protocol=SSL
 ssl.truststore.location=/var/kafka/kafka.client.truststore.jks
 EOF
 
-
-cd /var/kafka/
-EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
-AWS_REGION="`echo \"$EC2_AVAIL_ZONE\" | sed 's/[a-z]$//'`"
-export AWS_REGION
-echo -e "Get Kafka ARN"
-KAFKA_CLUSTER_ARN=`aws kafka list-clusters --region ${AWS_REGION} --output text --query 'ClusterInfoList[*].ClusterArn'`
-echo -e "Get the zookeeper string"
-KAFKA_ZOOKEEPER=`aws kafka describe-cluster --cluster-arn ${KAFKA_CLUSTER_ARN} --region ${AWS_REGION} --output text --query 'ClusterInfo.ZookeeperConnectString'`
-echo -e "create the topics"
+# Get Cluster Details
+KAFKA_CLUSTER_NAME="miztiik-msk-cluster-01"
 STORE_EVENTS_TOPIC="MystiqueStoreEventsTopic"
-BOOTSTRAP_BROKER_SRV="b-2.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094,b-1.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094"
+
+KAFKA_CLUSTER_ARN=`aws kafka list-clusters --region ${AWS_REGION} --cluster-name-filter ${KAFKA_CLUSTER_NAME} --output text --query 'ClusterInfoList[*].ClusterArn'`
+KAFKA_ZOOKEEPER=`aws kafka describe-cluster --cluster-arn ${KAFKA_CLUSTER_ARN} --region ${AWS_REGION} --output text --query 'ClusterInfo.ZookeeperConnectString'`
+BOOTSTRAP_BROKER_SRV=`aws kafka get-bootstrap-brokers --region ${AWS_REGION} --cluster-arn ${KAFKA_CLUSTER_ARN} --output text --query 'BootstrapBrokerStringTls'`
+
+echo ${KAFKA_CLUSTER_NAME}
 echo ${KAFKA_CLUSTER_ARN}
 echo ${KAFKA_ZOOKEEPER}
 echo ${STORE_EVENTS_TOPIC}
 echo ${BOOTSTRAP_BROKER_SRV}
 
 echo -e "Creating topic ${STORE_EVENTS_TOPIC}"
-
 ./bin/kafka-topics.sh --create --zookeeper ${KAFKA_ZOOKEEPER} --replication-factor 2 --partitions 2 --topic ${STORE_EVENTS_TOPIC}
 
-make_topic=`./bin/kafka-topics.sh --create --zookeeper $kafka_zookeeper --replication-factor 3 --partitions 1 --topic ${STORE_EVENTS_TOPIC}`
-
-aws kafka get-bootstrap-brokers --region ${AWS_REGION} --cluster-arn ${KAFKA_CLUSTER_ARN}
-
-BOOTSTRAP_BROKER_SRV="b-2.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094,b-1.miztiik-msk-cluster-0.vq9rgy.c13.kafka.us-east-1.amazonaws.com:9094"
-
-
-./bin/kafka-console-producer.sh --broker-list ${BOOTSTRAP_BROKER_SRV} --producer.config /var/kafka/client.properties --topic  ${STORE_EVENTS_TOPIC}
-
-./bin/kafka-console-consumer.sh --bootstrap-server ${BOOTSTRAP_BROKER_SRV} --consumer.config /var/kafka/client.properties --topic  ${STORE_EVENTS_TOPIC} --from-beginning
-
+#  ./bin/kafka-console-producer.sh --broker-list ${BOOTSTRAP_BROKER_SRV} --producer.config /var/kafka/client.properties --topic  ${STORE_EVENTS_TOPIC}
+#  ./bin/kafka-console-consumer.sh --bootstrap-server ${BOOTSTRAP_BROKER_SRV} --consumer.config /var/kafka/client.properties --topic  ${STORE_EVENTS_TOPIC} --from-beginning
 }
 
 function install_cw_agent() {
@@ -201,7 +192,7 @@ cat > '/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json' << "EO
     "files": {
         "collect_list": [
         {
-            "file_path": "/var/log/miztiik-automation-app**.log",
+            "file_path": "/var/log/miztiik-automation-app**.json",
             "log_group_name": "/miztiik-automation/apps/",
             "log_stream_name":"mysql-client-logs",
             "timestamp_format": "%b %-d %H:%M:%S",
@@ -209,7 +200,7 @@ cat > '/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json' << "EO
             "timezone": "Local"
         },
         {
-            "file_path": "/var/log/miztiik-automation-app**.json",
+            "file_path": "/var/log/miztiik-automation-app**.log",
             "log_group_name": "/miztiik-automation/apps/",
             "log_stream_name":"app-logs",
             "timestamp_format": "%b %-d %H:%M:%S",
@@ -243,7 +234,7 @@ EOF
 #   instruction
 #   exit 1
 
-install_libs        | tee "${LOG_FILE}"
-install_cw_agent    | tee "${LOG_FILE}"
-install_kafka       | tee "${LOG_FILE}"
-
+install_libs                | tee "${LOG_FILE}"
+install_cw_agent            | tee "${LOG_FILE}"
+install_kafka               | tee "${LOG_FILE}"
+configure_kafka_topic       | tee "${APP_LOG_FILE}"

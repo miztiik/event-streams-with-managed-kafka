@@ -101,7 +101,7 @@ class ManagedKafkaStack(cdk.Stack):
 
         output_1 = cdk.CfnOutput(
             self,
-            "StoreEventsKafkaRouter",
+            "SalesEventsKafkaRouter",
             value=f"https://console.aws.amazon.com/msk/home?region={cdk.Aws.REGION}#/clusters/{self.msk_cluster.cluster_name}",
-            description="Store events Kafka Cluster"
+            description="Sales events Kafka Cluster"
         )
